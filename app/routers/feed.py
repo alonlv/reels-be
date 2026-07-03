@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -28,3 +28,22 @@ def get_feed(
         stmt = stmt.where(FeedItem.content_type == content_type)
     stmt = stmt.order_by(order).limit(limit)
     return session.execute(stmt).scalars().all()
+
+
+def _bump(session: Session, feed_id: int, column):
+    item = session.get(FeedItem, feed_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="not found")
+    setattr(item, column, getattr(item, column) + 1)
+    session.commit()
+    return getattr(item, column)
+
+
+@router.post("/feed/{feed_id}/view")
+def add_view(feed_id: int, session: Session = Depends(get_session)):
+    return {"views": _bump(session, feed_id, "views")}
+
+
+@router.post("/feed/{feed_id}/like")
+def add_like(feed_id: int, session: Session = Depends(get_session)):
+    return {"likes": _bump(session, feed_id, "likes")}

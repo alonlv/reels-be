@@ -1,0 +1,5 @@
+[
+  { "kind": "rss", "name": "Hugging Face Blog", "url": "https://huggingface.co/blog/feed.xml" },
+  { "kind": "rss", "name": "OpenAI News", "url": "https://openai.com/news/rss.xml" },
+  { "kind": "rss", "name": "Google AI Blog", "url": "https://blog.google/technology/ai/rss/" }
+]

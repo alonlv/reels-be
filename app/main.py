@@ -14,6 +14,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    from app.routers.feed import router as feed_router
+    app.include_router(feed_router)
+
     @app.get("/api/health")
     def health() -> dict:
         return {"ok": True}

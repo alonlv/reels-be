@@ -1,3 +1,5 @@
+import threading
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from app.models import FeedItem
 from app.schemas import FeedItemOut, FeedItemCreate
 from app.ingest.classify import classify_url
 from app.ingest.dedupe import dedup_hash
+from app.ingest.rss_scanner import run_scan
 from app.ingest.scraper import fetch_metadata
 from app.ratelimit import rate_limit
 
@@ -85,3 +88,9 @@ def submit_feed(
     session.commit()
     session.refresh(item)
     return item
+
+
+@router.post("/scan", status_code=202)
+def trigger_scan():
+    threading.Thread(target=run_scan, daemon=True).start()
+    return {"ok": True}

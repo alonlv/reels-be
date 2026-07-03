@@ -20,6 +20,9 @@ def session_factory(tmp_path):
 
 
 @pytest.fixture
-def client(session_factory):
+def client(session_factory, monkeypatch):
+    import app.db as _db
+    monkeypatch.setattr(_db, "migrate", lambda: None)
+    monkeypatch.setattr("app.scheduler.start_scheduler", lambda: None)
     from app.main import create_app
     return TestClient(create_app())

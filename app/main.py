@@ -1,12 +1,30 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.db import migrate
+    from app.ingest.sources import sync_sources
+    from app.scheduler import start_scheduler
+
+    migrate()
+    sync_sources()
+    sched = start_scheduler()
+    try:
+        yield
+    finally:
+        if sched is not None:
+            sched.shutdown(wait=False)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="reels-be")
+    app = FastAPI(title="reels-be", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[o.strip() for o in settings.cors_origins.split(",")],

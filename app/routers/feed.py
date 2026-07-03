@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.models import FeedItem
-from app.schemas import FeedItemOut
+from app.schemas import FeedItemOut, FeedItemCreate
+from app.ingest.classify import classify_url
+from app.ingest.dedupe import dedup_hash
+from app.ingest.scraper import fetch_metadata
+from app.ratelimit import rate_limit
 
 router = APIRouter(prefix="/api")
 
@@ -47,3 +51,37 @@ def add_view(feed_id: int, session: Session = Depends(get_session)):
 @router.post("/feed/{feed_id}/like")
 def add_like(feed_id: int, session: Session = Depends(get_session)):
     return {"likes": _bump(session, feed_id, "likes")}
+
+
+@router.post("/feed", response_model=FeedItemOut, status_code=status.HTTP_201_CREATED)
+def submit_feed(
+    payload: FeedItemCreate,
+    request: Request,
+    session: Session = Depends(get_session),
+    _: None = Depends(rate_limit),
+):
+    url = payload.url.strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="url must be http(s)")
+    meta = fetch_metadata(url)
+    title = payload.title or meta["title"] or url
+    summary = payload.description or meta["summary"]
+    h = dedup_hash(url, title)
+    if session.query(FeedItem).filter_by(dedup_hash=h).first():
+        raise HTTPException(status_code=409, detail="duplicate")
+    item = FeedItem(
+        content_type=classify_url(url),
+        source_url=url,
+        dedup_hash=h,
+        title=title,
+        article_summary=summary,
+        image_url=meta["image_url"],
+        source_type="manual",
+        status="published",
+        shared_by_name=payload.shared_by_name,
+        shared_by_email=payload.shared_by_email,
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item

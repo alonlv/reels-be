@@ -16,6 +16,10 @@ class FeedItem(Base):
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     author: Mapped[str | None] = mapped_column(String(256), nullable=True)
     article_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # LLM-generated two-layer explanation: a one-line blurb (short) shown on the
+    # card, and a deep-dive (long) revealed by "see more" in the feed.
+    short_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    long_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     source_type: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="published")

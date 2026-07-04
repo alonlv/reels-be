@@ -35,6 +35,26 @@ def migrate() -> None:
     engine = get_engine()
     _heal_legacy_sources(engine)
     Base.metadata.create_all(engine)
+    # create_all() never ALTERs an existing table, so newly added columns won't
+    # appear on a database created by an earlier app version. Add them in place.
+    _add_missing_columns(engine, "feed_items", {
+        "short_summary": "TEXT",
+        "long_summary": "TEXT",
+    })
+
+
+def _add_missing_columns(engine: Engine, table: str, columns: dict[str, str]) -> None:
+    """Add any of ``columns`` (name -> SQL type) missing from ``table``."""
+    inspector = inspect(engine)
+    if not inspector.has_table(table):
+        return
+    existing = {c["name"] for c in inspector.get_columns(table)}
+    missing = {n: ddl for n, ddl in columns.items() if n not in existing}
+    if not missing:
+        return
+    with engine.begin() as conn:
+        for name, ddl in missing.items():
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 def _heal_legacy_sources(engine: Engine) -> None:

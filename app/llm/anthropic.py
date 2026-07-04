@@ -1,7 +1,13 @@
 import httpx
 
 from app.config import get_settings
-from app.llm.prompts import SUMMARIZE_SYSTEM, summarize_user
+from app.llm.prompts import (
+    EXPLAIN_SYSTEM,
+    SUMMARIZE_SYSTEM,
+    coerce_explanation,
+    explain_user,
+    summarize_user,
+)
 
 
 class AnthropicProvider:
@@ -23,3 +29,22 @@ class AnthropicProvider:
         )
         resp.raise_for_status()
         return resp.json()["content"][0]["text"].strip()
+
+    def explain(self, title: str, text: str) -> dict:
+        s = get_settings()
+        resp = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": s.anthropic_api_key or "",
+                "anthropic-version": "2023-06-01",
+            },
+            json={
+                "model": s.anthropic_model,
+                "max_tokens": 600,
+                "system": EXPLAIN_SYSTEM,
+                "messages": [{"role": "user", "content": explain_user(title, text)}],
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        return coerce_explanation(resp.json()["content"][0]["text"])

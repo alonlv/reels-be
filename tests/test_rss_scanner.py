@@ -6,8 +6,8 @@ import app.db as db
 
 
 class FakeProvider:
-    def summarize(self, title, text):
-        return f"summary of {title}"
+    def explain(self, title, text):
+        return {"short": f"short {title}", "long": f"long {title}"}
 
 
 def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
@@ -25,7 +25,10 @@ def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
             assert n == 1
             items = s.query(FeedItem).all()
             assert len(items) == 1
-            assert items[0].article_summary == "summary of One"
+            assert items[0].short_summary == "short One"
+            assert items[0].long_summary == "long One"
+            # article_summary mirrors the short blurb for back-compat.
+            assert items[0].article_summary == "short One"
             assert items[0].source_type == "auto"
             assert items[0].shared_by_name == "System Auto-Pull"
 
@@ -37,7 +40,7 @@ def test_scan_falls_back_on_provider_error(session_factory, monkeypatch):
     ]})()
 
     class Boom:
-        def summarize(self, title, text):
+        def explain(self, title, text):
             raise RuntimeError("model down")
 
     with patch.object(scanner, "feedparser") as fp:
@@ -47,4 +50,6 @@ def test_scan_falls_back_on_provider_error(session_factory, monkeypatch):
             s.add(src); s.commit()
             scanner.scan_source(s, src, Boom())
             item = s.query(FeedItem).first()
+            assert item.short_summary == "raw text"
             assert item.article_summary == "raw text"
+            assert item.long_summary is None

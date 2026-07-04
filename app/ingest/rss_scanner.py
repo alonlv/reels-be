@@ -24,14 +24,20 @@ def scan_source(session, source: Source, provider) -> int:
             continue
         raw = entry.get("summary", "")
         try:
-            summary = provider.summarize(title, raw)
+            explanation = provider.explain(title, raw)
+            short = explanation.get("short")
+            long = explanation.get("long")
         except Exception as exc:  # noqa: BLE001 — never crash a scan
-            log.warning("summarize failed for %s: %s", url, exc)
-            summary = raw[:500] or None
+            log.warning("explain failed for %s: %s", url, exc)
+            short = raw[:400] or None
+            long = None
         image = fetch_metadata(url)["image_url"]
         session.add(FeedItem(
             content_type="article", source_url=url, dedup_hash=h,
-            title=title, article_summary=summary, image_url=image,
+            title=title,
+            # article_summary keeps mirroring the short blurb for back-compat.
+            article_summary=short, short_summary=short, long_summary=long,
+            image_url=image,
             source_type="auto", status="published",
             shared_by_name="System Auto-Pull",
             shared_by_email="system@company.internal",

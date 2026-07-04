@@ -40,4 +40,4 @@ print('✅ Migrations complete')
 "
 
 echo "🤖 Starting scheduler and API server..."
-exec uvicorn app.main:app --host :: --port 8000
+exec uvicorn app.main:app --host :: --port "${PORT:-8000}"

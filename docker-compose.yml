@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: reels
+      POSTGRES_PASSWORD: reels
+      POSTGRES_DB: reels
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reels"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg2://reels:reels@db:5432/reels
+      MODEL_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: gemma2:2b
+      CORS_ORIGINS: http://localhost:5173
+      SCAN_ENABLED: "true"
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["8000:8000"]
+
+  frontend:
+    build: ../reels-fe
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    depends_on: [backend]
+    ports: ["5173:5173"]
+
+volumes:
+  pgdata:

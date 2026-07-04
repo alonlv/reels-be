@@ -2,6 +2,7 @@ import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -26,7 +27,7 @@ _SORT = {
 def get_feed(
     sort_by: str = "date",
     content_type: str | None = None,
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=50, le=200, ge=1),
     session: Session = Depends(get_session),
 ):
     order = _SORT.get(sort_by, _SORT["date"])
@@ -85,7 +86,11 @@ def submit_feed(
         shared_by_email=payload.shared_by_email,
     )
     session.add(item)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="duplicate")
     session.refresh(item)
     return item
 

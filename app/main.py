@@ -10,10 +10,12 @@ from app.config import get_settings
 async def lifespan(app: FastAPI):
     from app.db import migrate
     from app.ingest.sources import sync_sources
+    from app.ingest.x_accounts import sync_x_accounts
     from app.scheduler import start_scheduler
 
     migrate()
     sync_sources()
+    sync_x_accounts()
     sched = start_scheduler()
     try:
         yield

@@ -1,0 +1,4 @@
+[
+  { "x_handle": "OpenAI", "x_user_id": "REPLACE_WITH_NUMERIC_ID" },
+  { "x_handle": "GoogleAI", "x_user_id": "REPLACE_WITH_NUMERIC_ID" }
+]

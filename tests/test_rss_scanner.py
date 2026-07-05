@@ -91,6 +91,63 @@ def test_scan_falls_back_on_provider_error(session_factory, monkeypatch):
             assert item.category == "other"
 
 
+def test_scan_strips_html_from_fallback_summary(session_factory, monkeypatch):
+    # When the model is down we fall back to the feed teaser — which is raw HTML.
+    # It must be stripped of tags/entities before it ever reaches the feed.
+    monkeypatch.setattr(scanner, "fetch_metadata", lambda url: {"image_url": None})
+    html_summary = (
+        "<blockquote>&quot;Quote&quot; &#x2013;Author</blockquote>"
+        "<p>Body sentence.</p>"
+    )
+    fake_feed = type("F", (), {"entries": [
+        {"link": "https://e.com/html", "title": "HTMLy", "summary": html_summary},
+    ]})()
+
+    class Boom:
+        def explain(self, title, text):
+            raise RuntimeError("model down")
+
+    with patch.object(scanner, "feedparser") as fp:
+        fp.parse.return_value = fake_feed
+        with db.SessionLocal() as s:
+            src = Source(kind="rss", name="H", url="https://feedH")
+            s.add(src); s.commit()
+            scanner.scan_source(s, src, Boom())
+            item = s.query(FeedItem).first()
+            assert "<" not in item.short_summary
+            assert "&quot;" not in item.short_summary and "&#" not in item.short_summary
+            assert item.short_summary == '"Quote" –Author Body sentence.'
+
+
+def test_scan_summarizes_from_fetched_page_text(session_factory, monkeypatch):
+    # Problem: RSS teasers are too thin for technical detail. Fetch the article
+    # page and summarise from its full body, not the teaser.
+    monkeypatch.setattr(
+        scanner, "fetch_metadata",
+        lambda url: {"image_url": None, "text": "FULL ARTICLE BODY with numbers"},
+    )
+    captured = {}
+
+    class Capture:
+        def explain(self, title, text):
+            captured["text"] = text
+            return {"short": "s", "long": "l", "technical": "t", "category": "research"}
+
+    fake_feed = type("F", (), {"entries": [
+        {"link": "https://e.com/full", "title": "Full", "summary": "thin teaser"},
+    ]})()
+    with patch.object(scanner, "feedparser") as fp:
+        fp.parse.return_value = fake_feed
+        with db.SessionLocal() as s:
+            src = Source(kind="rss", name="F", url="https://feedF")
+            s.add(src); s.commit()
+            scanner.scan_source(s, src, Capture())
+            # The model saw the fetched article body, not the RSS teaser.
+            assert captured["text"] == "FULL ARTICLE BODY with numbers"
+            item = s.query(FeedItem).first()
+            assert item.technical_summary == "t"
+
+
 def test_scan_falls_back_to_keyword_category_when_model_off_taxonomy(
     session_factory, monkeypatch
 ):

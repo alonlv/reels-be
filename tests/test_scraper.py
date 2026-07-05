@@ -1,4 +1,27 @@
-from app.ingest.scraper import parse_metadata
+from app.ingest.scraper import clean_text, parse_metadata
+
+
+def test_clean_text_strips_tags_and_entities():
+    raw = ('<blockquote>&quot;Language back as thought&quot; &#x2013;Winograd'
+           '</blockquote><p>The recent successes of generative AI.</p>')
+    assert clean_text(raw) == (
+        '"Language back as thought" –Winograd '
+        "The recent successes of generative AI."
+    )
+
+
+def test_clean_text_handles_escaped_markup_and_empty():
+    assert clean_text("&lt;p&gt;hi &amp; bye&lt;/p&gt;") == "hi & bye"
+    assert clean_text("") is None
+    assert clean_text(None) is None
+
+
+def test_parse_metadata_cleans_summary_html():
+    html = ('<html><head>'
+            '<meta property="og:description" content="A &amp; B &#x2013; C">'
+            "</head><body></body></html>")
+    meta = parse_metadata(html, "https://example.com/a")
+    assert meta["summary"] == "A & B – C"
 
 
 def test_parse_og_tags():

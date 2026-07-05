@@ -1,7 +1,24 @@
+from html import unescape
 from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
+
+
+def clean_text(value: str | None) -> str | None:
+    """Reduce a possibly-HTML snippet to plain, display-ready text.
+
+    Decodes entities (``&quot;``, ``&#x2013;``, …), strips tags (``<p>``,
+    ``<blockquote>``, …) and collapses whitespace, so raw RSS/OG HTML never
+    reaches the feed UI. Returns None when nothing readable is left.
+    """
+    if not value:
+        return None
+    # Unescape first so escaped markup ("&lt;p&gt;") turns into real tags we can
+    # then strip; BeautifulSoup drops the tags and decodes any remaining entities.
+    text = BeautifulSoup(unescape(value), "html.parser").get_text(" ", strip=True)
+    text = " ".join(text.split())
+    return text or None
 
 
 def _meta(soup: BeautifulSoup, prop: str) -> str | None:
@@ -66,7 +83,13 @@ def parse_metadata(html: str, url: str) -> dict:
     image_url = _best_image(soup, url)
     # Extract the body text last: _visible_text strips tags in place.
     text = _visible_text(soup)
-    return {"title": title, "image_url": image_url, "summary": summary, "text": text}
+    # Strip any stray markup/entities so summaries are display-ready.
+    return {
+        "title": clean_text(title),
+        "image_url": image_url,
+        "summary": clean_text(summary),
+        "text": text,
+    }
 
 
 def fetch_metadata(url: str, timeout: float = 8.0) -> dict:

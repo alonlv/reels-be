@@ -1,13 +1,45 @@
+import time
 from unittest.mock import patch
 
 import app.ingest.rss_scanner as scanner
+from app.ingest.rss_scanner import entry_image, entry_published
 from app.models import Source, FeedItem
 import app.db as db
 
 
+def test_entry_image_prefers_media_thumbnail():
+    entry = {"media_thumbnail": [{"url": "https://img/x.jpg"}], "summary": ""}
+    assert entry_image(entry) == "https://img/x.jpg"
+
+
+def test_entry_published_parses_struct_time():
+    st = time.struct_time((2026, 3, 14, 9, 30, 0, 0, 0, 0))
+    got = entry_published({"published_parsed": st})
+    assert got is not None
+    assert (got.year, got.month, got.day, got.hour) == (2026, 3, 14, 9)
+
+
+def test_entry_published_none_when_absent():
+    assert entry_published({"summary": "no date"}) is None
+
+
+def test_entry_image_reads_inline_img_from_summary():
+    entry = {"summary": 'text <img src="https://img/inline.png"/> more'}
+    assert entry_image(entry) == "https://img/inline.png"
+
+
+def test_entry_image_none_when_absent():
+    assert entry_image({"summary": "no images here"}) is None
+
+
 class FakeProvider:
-    def summarize(self, title, text):
-        return f"summary of {title}"
+    def explain(self, title, text):
+        return {
+            "short": f"short {title}",
+            "long": f"long {title}",
+            "technical": f"tech {title}",
+            "category": "research",
+        }
 
 
 def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
@@ -25,7 +57,12 @@ def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
             assert n == 1
             items = s.query(FeedItem).all()
             assert len(items) == 1
-            assert items[0].article_summary == "summary of One"
+            assert items[0].short_summary == "short One"
+            assert items[0].long_summary == "long One"
+            assert items[0].technical_summary == "tech One"
+            assert items[0].category == "research"
+            # article_summary mirrors the short blurb for back-compat.
+            assert items[0].article_summary == "short One"
             assert items[0].source_type == "auto"
             assert items[0].shared_by_name == "System Auto-Pull"
 
@@ -37,7 +74,7 @@ def test_scan_falls_back_on_provider_error(session_factory, monkeypatch):
     ]})()
 
     class Boom:
-        def summarize(self, title, text):
+        def explain(self, title, text):
             raise RuntimeError("model down")
 
     with patch.object(scanner, "feedparser") as fp:
@@ -47,4 +84,32 @@ def test_scan_falls_back_on_provider_error(session_factory, monkeypatch):
             s.add(src); s.commit()
             scanner.scan_source(s, src, Boom())
             item = s.query(FeedItem).first()
+            assert item.short_summary == "raw text"
             assert item.article_summary == "raw text"
+            assert item.long_summary is None
+            # Provider failed → keyword categoriser still assigns something.
+            assert item.category == "other"
+
+
+def test_scan_falls_back_to_keyword_category_when_model_off_taxonomy(
+    session_factory, monkeypatch
+):
+    monkeypatch.setattr(scanner, "fetch_metadata", lambda url: {"image_url": None})
+    fake_feed = type("F", (), {"entries": [
+        {"link": "https://e.com/3", "title": "Startup raises $40M for AI chips",
+         "summary": "funding round"},
+    ]})()
+
+    class Weird:
+        def explain(self, title, text):
+            return {"short": "s", "long": "l", "category": "banana"}
+
+    with patch.object(scanner, "feedparser") as fp:
+        fp.parse.return_value = fake_feed
+        with db.SessionLocal() as s:
+            src = Source(kind="rss", name="Z", url="https://feed3")
+            s.add(src); s.commit()
+            scanner.scan_source(s, src, Weird())
+            item = s.query(FeedItem).first()
+            # "banana" is off-taxonomy → keyword rules pick "business".
+            assert item.category == "business"

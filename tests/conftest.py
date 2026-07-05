@@ -19,6 +19,16 @@ def session_factory(tmp_path):
     return factory
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    # The limiter keeps module-level state; clear it so POST-heavy tests don't
+    # bleed their request budget into one another.
+    import app.ratelimit as rl
+    rl._hits.clear()
+    yield
+    rl._hits.clear()
+
+
 @pytest.fixture
 def client(session_factory, monkeypatch):
     import app.db as _db

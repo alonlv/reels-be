@@ -30,7 +30,7 @@ services:
       OLLAMA_MODEL: gemma2:2b
       CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
       SCAN_ENABLED: "true"
-      SCAN_CRON: "0 */6 * * *"
+      SCAN_CRON: "0 * * * *"
       X_SYNC_INTERVAL_HOURS: "6"
     ports: ["8000:8000"]
     depends_on:

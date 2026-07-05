@@ -20,3 +20,18 @@ def test_parse_falls_back_to_title_tag():
     meta = parse_metadata(html, "https://example.com/a")
     assert meta["title"] == "Plain Title"
     assert meta["image_url"] is None
+
+
+def test_image_falls_back_to_twitter_then_inline():
+    html = """
+    <html><head><meta name="twitter:image" content="https://img.example/t.png">
+    </head><body><img src="/first.jpg"></body></html>
+    """
+    meta = parse_metadata(html, "https://example.com/a")
+    assert meta["image_url"] == "https://img.example/t.png"
+
+
+def test_image_resolves_relative_inline_img():
+    html = "<html><head></head><body><img src='/media/hero.jpg'></body></html>"
+    meta = parse_metadata(html, "https://example.com/post/1")
+    assert meta["image_url"] == "https://example.com/media/hero.jpg"

@@ -27,6 +27,31 @@ def test_submit_rejects_bad_url(client):
     assert resp.status_code == 400
 
 
+def test_submit_runs_llm_when_summarize_true(client, monkeypatch):
+    monkeypatch.setattr(
+        feed_mod, "fetch_metadata",
+        lambda url: {"title": "T", "image_url": None, "summary": "raw page text"},
+    )
+
+    class FakeProvider:
+        def explain(self, title, text):
+            return {"short": "AI short", "long": "AI long", "category": "product"}
+
+    monkeypatch.setattr(feed_mod, "get_provider", lambda: FakeProvider())
+    # Enrichment runs in a background thread; run it inline for the test.
+    monkeypatch.setattr(feed_mod, "_enrich_in_background", feed_mod._enrich_and_update)
+    resp = client.post("/api/feed", json={
+        "url": "https://example.com/p", "summarize": True,
+    })
+    assert resp.status_code == 201
+    item_id = resp.json()["id"]
+    got = next(i for i in client.get("/api/feed").json() if i["id"] == item_id)
+    assert got["short_summary"] == "AI short"
+    assert got["long_summary"] == "AI long"
+    assert got["category"] == "product"
+    assert got["feed"] == "ai_news"
+
+
 def test_submit_duplicate_409(client, monkeypatch):
     monkeypatch.setattr(
         feed_mod, "fetch_metadata",

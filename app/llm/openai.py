@@ -1,7 +1,13 @@
 import httpx
 
 from app.config import get_settings
-from app.llm.prompts import SUMMARIZE_SYSTEM, summarize_user
+from app.llm.prompts import (
+    EXPLAIN_SYSTEM,
+    SUMMARIZE_SYSTEM,
+    coerce_explanation,
+    explain_user,
+    summarize_user,
+)
 
 
 class OpenAIProvider:
@@ -21,3 +27,21 @@ class OpenAIProvider:
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
+
+    def explain(self, title: str, text: str) -> dict:
+        s = get_settings()
+        resp = httpx.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"authorization": f"Bearer {s.openai_api_key or ''}"},
+            json={
+                "model": s.openai_model,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": EXPLAIN_SYSTEM},
+                    {"role": "user", "content": explain_user(title, text)},
+                ],
+            },
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        return coerce_explanation(resp.json()["choices"][0]["message"]["content"])

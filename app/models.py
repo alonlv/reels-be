@@ -16,7 +16,23 @@ class FeedItem(Base):
     title: Mapped[str | None] = mapped_column(String(512), nullable=True)
     author: Mapped[str | None] = mapped_column(String(256), nullable=True)
     article_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # LLM-generated two-layer explanation: a one-line blurb (short) shown on the
+    # card, and a deep-dive (long) revealed by "see more" in the feed.
+    short_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    long_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Technical deep-dive ("read technical info"), separate from the general
+    # "read more" (long_summary).
+    technical_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Topic bucket (research/product/business/policy/open-source/tutorial/other).
+    category: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # When the underlying item was published at the source (vs created_at, when
+    # we ingested it into the feed).
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Which feed this item belongs to: "ai_news" (auto/curated) or "csi" (manual).
+    feed: Mapped[str] = mapped_column(String(16), default="ai_news", index=True)
     image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Inline image (data: URI) for user-uploaded photos, e.g. CSI entries.
+    image_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_type: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="published")
     shared_by_name: Mapped[str] = mapped_column(String(256))

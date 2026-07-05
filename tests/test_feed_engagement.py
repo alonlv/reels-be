@@ -29,5 +29,13 @@ def test_like_increments(client):
     assert r.json()["likes"] == 1
 
 
+def test_unlike_decrements_and_floors_at_zero(client):
+    fid = _seed("u")
+    client.post(f"/api/feed/{fid}/like")
+    assert client.post(f"/api/feed/{fid}/unlike").json()["likes"] == 0
+    # Pressing unlike again never goes negative.
+    assert client.post(f"/api/feed/{fid}/unlike").json()["likes"] == 0
+
+
 def test_view_missing_404(client):
     assert client.post("/api/feed/99999/view").status_code == 404

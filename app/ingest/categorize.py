@@ -19,8 +19,8 @@ CATEGORIES = [
 _RULES: list[tuple[str, tuple[str, ...]]] = [
     ("policy", (
         "regulat", "lawsuit", "sued", "copyright", "privacy", "ethic", "safety",
-        "governance", "ban ", "banned", " act", "policy", "misinformation",
-        "election", "watermark", "guardrail",
+        "governance", "banned", "ai act", "policy", "legislation",
+        "misinformation", "election", "watermark", "guardrail",
     )),
     ("business", (
         "funding", "raises", "raised", "valuation", "acqui", " ipo", "revenue",

@@ -15,7 +15,9 @@ class FeedItemOut(BaseModel):
     short_summary: str | None
     long_summary: str | None
     category: str | None
+    feed: str
     image_url: str | None
+    image_data: str | None
     source_type: str
     status: str
     shared_by_name: str
@@ -29,5 +31,22 @@ class FeedItemCreate(BaseModel):
     url: str
     title: str | None = None
     description: str | None = None
+    summarize: bool = False
     shared_by_name: str = "Anonymous"
     shared_by_email: str = "anonymous@company.internal"
+
+
+class SourceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    name: str
+    url: str
+    is_active: bool
+
+
+class SourceCreate(BaseModel):
+    name: str
+    url: str
+    kind: str = "rss"

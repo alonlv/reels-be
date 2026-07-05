@@ -41,6 +41,8 @@ def migrate() -> None:
         "short_summary": "TEXT",
         "long_summary": "TEXT",
         "category": "VARCHAR(32)",
+        "feed": "VARCHAR(16) DEFAULT 'ai_news'",
+        "image_data": "TEXT",
     })
 
 

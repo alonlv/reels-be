@@ -22,7 +22,11 @@ class FeedItem(Base):
     long_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Topic bucket (research/product/business/policy/open-source/tutorial/other).
     category: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    # Which feed this item belongs to: "ai_news" (auto/curated) or "csi" (manual).
+    feed: Mapped[str] = mapped_column(String(16), default="ai_news", index=True)
     image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Inline image (data: URI) for user-uploaded photos, e.g. CSI entries.
+    image_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_type: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="published")
     shared_by_name: Mapped[str] = mapped_column(String(256))

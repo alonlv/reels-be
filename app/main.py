@@ -35,7 +35,9 @@ def create_app() -> FastAPI:
     )
 
     from app.routers.feed import router as feed_router
+    from app.routers.sources import router as sources_router
     app.include_router(feed_router)
+    app.include_router(sources_router)
 
     @app.get("/api/health")
     def health() -> dict:

@@ -4,8 +4,8 @@ import re
 import feedparser
 
 from app.db import SessionLocal
-from app.ingest.categorize import categorize, normalize_category
 from app.ingest.dedupe import dedup_hash
+from app.ingest.enrich import enrich
 from app.ingest.scraper import fetch_metadata
 from app.llm.factory import get_provider
 from app.models import FeedItem, Source
@@ -47,18 +47,7 @@ def scan_source(session, source: Source, provider) -> int:
         if session.query(FeedItem).filter_by(dedup_hash=h).first():
             continue
         raw = entry.get("summary", "")
-        try:
-            explanation = provider.explain(title, raw)
-            short = explanation.get("short")
-            long = explanation.get("long")
-            # Trust the model's label only if it's on-taxonomy; else fall back.
-            category = normalize_category(explanation.get("category")) \
-                or categorize(title, raw)
-        except Exception as exc:  # noqa: BLE001 — never crash a scan
-            log.warning("explain failed for %s: %s", url, exc)
-            short = raw[:400] or None
-            long = None
-            category = categorize(title, raw)
+        short, long, category = enrich(provider, title, raw)
         # Prefer a thumbnail the feed already supplies; else scrape the page.
         image = entry_image(entry) or fetch_metadata(url)["image_url"]
         session.add(FeedItem(
@@ -66,7 +55,7 @@ def scan_source(session, source: Source, provider) -> int:
             title=title,
             # article_summary keeps mirroring the short blurb for back-compat.
             article_summary=short, short_summary=short, long_summary=long,
-            category=category, image_url=image,
+            category=category, feed="ai_news", image_url=image,
             source_type="auto", status="published",
             shared_by_name="System Auto-Pull",
             shared_by_email="system@company.internal",

@@ -8,7 +8,7 @@ import feedparser
 from app.db import SessionLocal
 from app.ingest.dedupe import dedup_hash
 from app.ingest.enrich import enrich
-from app.ingest.scraper import fetch_metadata
+from app.ingest.scraper import clean_text, fetch_metadata
 from app.llm.factory import get_provider
 from app.models import FeedItem, Source
 
@@ -62,10 +62,15 @@ def scan_source(session, source: Source, provider) -> int:
         h = dedup_hash(url, title)
         if session.query(FeedItem).filter_by(dedup_hash=h).first():
             continue
-        raw = entry.get("summary", "")
-        short, long, technical, category = enrich(provider, title, raw)
-        # Prefer a thumbnail the feed already supplies; else scrape the page.
-        image = entry_image(entry) or fetch_metadata(url)["image_url"]
+        # The RSS teaser is usually a thin HTML blurb — strip its markup so the
+        # summary never leaks tags/entities, and fetch the article page so the
+        # model has real content to pull long/technical detail from.
+        raw = clean_text(entry.get("summary", "")) or ""
+        meta = fetch_metadata(url)
+        body = meta.get("text") or raw
+        short, long, technical, category = enrich(provider, title, body)
+        # Prefer a thumbnail the feed already supplies; else the page's image.
+        image = entry_image(entry) or meta.get("image_url")
         session.add(FeedItem(
             content_type="article", source_url=url, dedup_hash=h,
             title=title,

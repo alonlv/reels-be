@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app.deps import require_admin
 from app.ingest.rss_scanner import run_scan
 from app.models import Source
 from app.ratelimit import rate_limit
@@ -24,6 +25,7 @@ def add_source(
     payload: SourceCreate,
     session: Session = Depends(get_session),
     _: None = Depends(rate_limit),
+    __: None = Depends(require_admin),
 ):
     url = payload.url.strip()
     if not url.lower().startswith(("http://", "https://")):
@@ -46,7 +48,11 @@ def add_source(
 
 
 @router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_source(source_id: int, session: Session = Depends(get_session)):
+def delete_source(
+    source_id: int,
+    session: Session = Depends(get_session),
+    _: None = Depends(require_admin),
+):
     item = session.get(Source, source_id)
     if item is None:
         raise HTTPException(status_code=404, detail="not found")

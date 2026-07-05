@@ -1,4 +1,5 @@
 import logging
+import re
 
 import feedparser
 
@@ -9,6 +10,28 @@ from app.llm.factory import get_provider
 from app.models import FeedItem, Source
 
 log = logging.getLogger("rss_scanner")
+
+_IMG_SRC_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
+
+
+def entry_image(entry) -> str | None:
+    """Pull a thumbnail straight from the feed entry when the feed provides one.
+
+    Feeds commonly carry a related image via media:thumbnail, media:content, an
+    image enclosure, or an <img> embedded in the summary/content HTML.
+    """
+    for key in ("media_thumbnail", "media_content"):
+        media = entry.get(key)
+        if media and isinstance(media, list) and media[0].get("url"):
+            return media[0]["url"]
+    for enc in entry.get("enclosures", []) or []:
+        if str(enc.get("type", "")).startswith("image") and enc.get("href"):
+            return enc["href"]
+    html = entry.get("summary", "") or ""
+    match = _IMG_SRC_RE.search(html)
+    if match:
+        return match.group(1)
+    return None
 
 
 def scan_source(session, source: Source, provider) -> int:
@@ -31,7 +54,8 @@ def scan_source(session, source: Source, provider) -> int:
             log.warning("explain failed for %s: %s", url, exc)
             short = raw[:400] or None
             long = None
-        image = fetch_metadata(url)["image_url"]
+        # Prefer a thumbnail the feed already supplies; else scrape the page.
+        image = entry_image(entry) or fetch_metadata(url)["image_url"]
         session.add(FeedItem(
             content_type="article", source_url=url, dedup_hash=h,
             title=title,

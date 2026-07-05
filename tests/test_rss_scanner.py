@@ -1,8 +1,23 @@
 from unittest.mock import patch
 
 import app.ingest.rss_scanner as scanner
+from app.ingest.rss_scanner import entry_image
 from app.models import Source, FeedItem
 import app.db as db
+
+
+def test_entry_image_prefers_media_thumbnail():
+    entry = {"media_thumbnail": [{"url": "https://img/x.jpg"}], "summary": ""}
+    assert entry_image(entry) == "https://img/x.jpg"
+
+
+def test_entry_image_reads_inline_img_from_summary():
+    entry = {"summary": 'text <img src="https://img/inline.png"/> more'}
+    assert entry_image(entry) == "https://img/inline.png"
+
+
+def test_entry_image_none_when_absent():
+    assert entry_image({"summary": "no images here"}) is None
 
 
 class FakeProvider:

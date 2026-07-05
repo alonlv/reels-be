@@ -14,6 +14,7 @@ class FeedItemOut(BaseModel):
     article_summary: str | None
     short_summary: str | None
     long_summary: str | None
+    category: str | None
     image_url: str | None
     source_type: str
     status: str

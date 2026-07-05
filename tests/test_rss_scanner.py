@@ -22,7 +22,11 @@ def test_entry_image_none_when_absent():
 
 class FakeProvider:
     def explain(self, title, text):
-        return {"short": f"short {title}", "long": f"long {title}"}
+        return {
+            "short": f"short {title}",
+            "long": f"long {title}",
+            "category": "research",
+        }
 
 
 def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
@@ -42,6 +46,7 @@ def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
             assert len(items) == 1
             assert items[0].short_summary == "short One"
             assert items[0].long_summary == "long One"
+            assert items[0].category == "research"
             # article_summary mirrors the short blurb for back-compat.
             assert items[0].article_summary == "short One"
             assert items[0].source_type == "auto"
@@ -68,3 +73,29 @@ def test_scan_falls_back_on_provider_error(session_factory, monkeypatch):
             assert item.short_summary == "raw text"
             assert item.article_summary == "raw text"
             assert item.long_summary is None
+            # Provider failed → keyword categoriser still assigns something.
+            assert item.category == "other"
+
+
+def test_scan_falls_back_to_keyword_category_when_model_off_taxonomy(
+    session_factory, monkeypatch
+):
+    monkeypatch.setattr(scanner, "fetch_metadata", lambda url: {"image_url": None})
+    fake_feed = type("F", (), {"entries": [
+        {"link": "https://e.com/3", "title": "Startup raises $40M for AI chips",
+         "summary": "funding round"},
+    ]})()
+
+    class Weird:
+        def explain(self, title, text):
+            return {"short": "s", "long": "l", "category": "banana"}
+
+    with patch.object(scanner, "feedparser") as fp:
+        fp.parse.return_value = fake_feed
+        with db.SessionLocal() as s:
+            src = Source(kind="rss", name="Z", url="https://feed3")
+            s.add(src); s.commit()
+            scanner.scan_source(s, src, Weird())
+            item = s.query(FeedItem).first()
+            # "banana" is off-taxonomy → keyword rules pick "business".
+            assert item.category == "business"

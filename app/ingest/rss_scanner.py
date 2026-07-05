@@ -4,6 +4,7 @@ import re
 import feedparser
 
 from app.db import SessionLocal
+from app.ingest.categorize import categorize, normalize_category
 from app.ingest.dedupe import dedup_hash
 from app.ingest.scraper import fetch_metadata
 from app.llm.factory import get_provider
@@ -50,10 +51,14 @@ def scan_source(session, source: Source, provider) -> int:
             explanation = provider.explain(title, raw)
             short = explanation.get("short")
             long = explanation.get("long")
+            # Trust the model's label only if it's on-taxonomy; else fall back.
+            category = normalize_category(explanation.get("category")) \
+                or categorize(title, raw)
         except Exception as exc:  # noqa: BLE001 — never crash a scan
             log.warning("explain failed for %s: %s", url, exc)
             short = raw[:400] or None
             long = None
+            category = categorize(title, raw)
         # Prefer a thumbnail the feed already supplies; else scrape the page.
         image = entry_image(entry) or fetch_metadata(url)["image_url"]
         session.add(FeedItem(
@@ -61,7 +66,7 @@ def scan_source(session, source: Source, provider) -> int:
             title=title,
             # article_summary keeps mirroring the short blurb for back-compat.
             article_summary=short, short_summary=short, long_summary=long,
-            image_url=image,
+            category=category, image_url=image,
             source_type="auto", status="published",
             shared_by_name="System Auto-Pull",
             shared_by_email="system@company.internal",

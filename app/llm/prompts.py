@@ -17,13 +17,16 @@ def summarize_user(title: str, text: str) -> str:
 # We ask the model for both in a single call and return them as JSON.
 EXPLAIN_SYSTEM = (
     "You explain AI/ML/Data-Science news for a scrollable, TikTok-style feed. "
-    "Given one article, produce two explanations of the same topic:\n"
+    "Given one article, produce:\n"
     '- "short": a single punchy sentence (max ~30 words) saying what it is and '
     "why it matters. This is the headline blurb.\n"
     '- "long": a richer 3-5 sentence deep-dive with the key details, context, '
     "and implications.\n"
+    '- "category": exactly one of research, product, business, policy, '
+    "open-source, tutorial, other.\n"
     "Write for a technical but busy audience. Do not repeat the title verbatim. "
-    'Reply with ONLY a JSON object of the form {"short": "...", "long": "..."} '
+    "Reply with ONLY a JSON object of the form "
+    '{"short": "...", "long": "...", "category": "..."} '
     "— no preamble, no markdown, no code fences."
 )
 
@@ -55,19 +58,25 @@ def parse_explanation(raw: str) -> dict | None:
         return None
     short = str(data.get("short") or "").strip()
     long = str(data.get("long") or "").strip()
+    category = str(data.get("category") or "").strip()
     if not short and not long:
         return None
-    return {"short": short or None, "long": long or None}
+    return {
+        "short": short or None,
+        "long": long or None,
+        "category": category or None,
+    }
 
 
 def coerce_explanation(raw: str) -> dict:
-    """Always return a ``{"short", "long"}`` dict, never raising.
+    """Always return a ``{"short", "long", "category"}`` dict, never raising.
 
     If the model didn't return usable JSON, fall back to treating the whole
-    reply as the short blurb so the item still renders.
+    reply as the short blurb so the item still renders. Category validation is
+    left to the caller.
     """
     parsed = parse_explanation(raw)
     if parsed:
         return parsed
     cleaned = (raw or "").strip()
-    return {"short": cleaned[:400] or None, "long": None}
+    return {"short": cleaned[:400] or None, "long": None, "category": None}

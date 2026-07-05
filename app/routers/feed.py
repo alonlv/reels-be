@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.models import FeedItem
 from app.schemas import FeedItemOut, FeedItemCreate
+from app.ingest.categorize import categorize
 from app.ingest.classify import classify_url
 from app.ingest.dedupe import dedup_hash
 from app.ingest.rss_scanner import run_scan
@@ -27,6 +28,7 @@ _SORT = {
 def get_feed(
     sort_by: str = "date",
     content_type: str | None = None,
+    category: str | None = None,
     limit: int = Query(default=50, le=200, ge=1),
     session: Session = Depends(get_session),
 ):
@@ -34,6 +36,8 @@ def get_feed(
     stmt = select(FeedItem).where(FeedItem.status == "published")
     if content_type:
         stmt = stmt.where(FeedItem.content_type == content_type)
+    if category:
+        stmt = stmt.where(FeedItem.category == category)
     stmt = stmt.order_by(order).limit(limit)
     return session.execute(stmt).scalars().all()
 
@@ -79,6 +83,8 @@ def submit_feed(
         dedup_hash=h,
         title=title,
         article_summary=summary,
+        short_summary=summary,
+        category=categorize(title, summary or ""),
         image_url=meta["image_url"],
         source_type="manual",
         status="published",

@@ -40,6 +40,7 @@ def migrate() -> None:
     _add_missing_columns(engine, "feed_items", {
         "short_summary": "TEXT",
         "long_summary": "TEXT",
+        "category": "VARCHAR(32)",
     })
 
 

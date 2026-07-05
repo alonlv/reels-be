@@ -20,6 +20,8 @@ class FeedItem(Base):
     # card, and a deep-dive (long) revealed by "see more" in the feed.
     short_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     long_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Topic bucket (research/product/business/policy/open-source/tutorial/other).
+    category: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     source_type: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="published")

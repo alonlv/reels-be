@@ -14,6 +14,7 @@ class FeedItemOut(BaseModel):
     article_summary: str | None
     short_summary: str | None
     long_summary: str | None
+    technical_summary: str | None
     category: str | None
     feed: str
     image_url: str | None
@@ -25,6 +26,7 @@ class FeedItemOut(BaseModel):
     views: int
     likes: int
     created_at: datetime
+    published_at: datetime | None
 
 
 class FeedItemCreate(BaseModel):
@@ -50,3 +52,22 @@ class SourceCreate(BaseModel):
     name: str
     url: str
     kind: str = "rss"
+
+
+class LoginRequest(BaseModel):
+    username: str = "guest"
+    password: str | None = None
+
+
+class LoginResponse(BaseModel):
+    name: str
+    role: str  # "admin" | "guest"
+    token: str | None = None
+
+
+class FeedItemPatch(BaseModel):
+    title: str | None = None
+    short_summary: str | None = None
+    long_summary: str | None = None
+    technical_summary: str | None = None
+    category: str | None = None

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     x_sync_interval_hours: int = 6
     x_bearer_token: str | None = None
     scan_enabled: bool = True
+    # Generic admin login. Anyone who logs in with this password becomes the
+    # admin and may edit/remove reels. Override in production.
+    admin_password: str = "admin"
 
 
 @lru_cache

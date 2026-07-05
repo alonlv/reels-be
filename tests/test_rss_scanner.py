@@ -1,7 +1,8 @@
+import time
 from unittest.mock import patch
 
 import app.ingest.rss_scanner as scanner
-from app.ingest.rss_scanner import entry_image
+from app.ingest.rss_scanner import entry_image, entry_published
 from app.models import Source, FeedItem
 import app.db as db
 
@@ -9,6 +10,17 @@ import app.db as db
 def test_entry_image_prefers_media_thumbnail():
     entry = {"media_thumbnail": [{"url": "https://img/x.jpg"}], "summary": ""}
     assert entry_image(entry) == "https://img/x.jpg"
+
+
+def test_entry_published_parses_struct_time():
+    st = time.struct_time((2026, 3, 14, 9, 30, 0, 0, 0, 0))
+    got = entry_published({"published_parsed": st})
+    assert got is not None
+    assert (got.year, got.month, got.day, got.hour) == (2026, 3, 14, 9)
+
+
+def test_entry_published_none_when_absent():
+    assert entry_published({"summary": "no date"}) is None
 
 
 def test_entry_image_reads_inline_img_from_summary():
@@ -25,6 +37,7 @@ class FakeProvider:
         return {
             "short": f"short {title}",
             "long": f"long {title}",
+            "technical": f"tech {title}",
             "category": "research",
         }
 
@@ -46,6 +59,7 @@ def test_scan_inserts_and_dedupes(session_factory, monkeypatch):
             assert len(items) == 1
             assert items[0].short_summary == "short One"
             assert items[0].long_summary == "long One"
+            assert items[0].technical_summary == "tech One"
             assert items[0].category == "research"
             # article_summary mirrors the short blurb for back-compat.
             assert items[0].article_summary == "short One"

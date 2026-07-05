@@ -20,13 +20,15 @@ EXPLAIN_SYSTEM = (
     "Given one article, produce:\n"
     '- "short": a single punchy sentence (max ~30 words) saying what it is and '
     "why it matters. This is the headline blurb.\n"
-    '- "long": a richer 3-5 sentence deep-dive with the key details, context, '
-    "and implications.\n"
+    '- "long": a plain-language deep-dive, at most 7-8 lines, that lets the '
+    "reader understand the story without opening the link.\n"
+    '- "technical": the technical details (methods, architecture, benchmarks, '
+    "numbers) for an expert reader, at most 7-8 lines. Use \"\" if there is "
+    "nothing technical to add.\n"
     '- "category": exactly one of research, product, business, policy, '
     "open-source, tutorial, other.\n"
-    "Write for a technical but busy audience. Do not repeat the title verbatim. "
-    "Reply with ONLY a JSON object of the form "
-    '{"short": "...", "long": "...", "category": "..."} '
+    "Do not repeat the title verbatim. Reply with ONLY a JSON object of the form "
+    '{"short": "...", "long": "...", "technical": "...", "category": "..."} '
     "— no preamble, no markdown, no code fences."
 )
 
@@ -58,25 +60,32 @@ def parse_explanation(raw: str) -> dict | None:
         return None
     short = str(data.get("short") or "").strip()
     long = str(data.get("long") or "").strip()
+    technical = str(data.get("technical") or "").strip()
     category = str(data.get("category") or "").strip()
     if not short and not long:
         return None
     return {
         "short": short or None,
         "long": long or None,
+        "technical": technical or None,
         "category": category or None,
     }
 
 
 def coerce_explanation(raw: str) -> dict:
-    """Always return a ``{"short", "long", "category"}`` dict, never raising.
+    """Always return a ``{"short", "long", "technical", "category"}`` dict.
 
-    If the model didn't return usable JSON, fall back to treating the whole
-    reply as the short blurb so the item still renders. Category validation is
-    left to the caller.
+    Never raises. If the model didn't return usable JSON, fall back to treating
+    the whole reply as the short blurb so the item still renders. Category
+    validation is left to the caller.
     """
     parsed = parse_explanation(raw)
     if parsed:
         return parsed
     cleaned = (raw or "").strip()
-    return {"short": cleaned[:400] or None, "long": None, "category": None}
+    return {
+        "short": cleaned[:400] or None,
+        "long": None,
+        "technical": None,
+        "category": None,
+    }

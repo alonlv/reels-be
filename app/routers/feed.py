@@ -3,16 +3,20 @@ import threading
 from uuid import uuid4
 
 from fastapi import (
-    APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status,
+    APIRouter, Depends, File, Form, Header, HTTPException, Query, Request,
+    UploadFile, status,
 )
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import app.db as db
+from app.config import get_settings
 from app.db import get_session
 from app.models import FeedItem
-from app.schemas import FeedItemOut, FeedItemCreate
+from app.schemas import (
+    FeedItemCreate, FeedItemOut, FeedItemPatch, LoginRequest, LoginResponse,
+)
 from app.ingest.categorize import categorize
 from app.ingest.classify import classify_url
 from app.ingest.dedupe import dedup_hash
@@ -40,7 +44,7 @@ def _enrich_and_update(item_id: int, title: str, text: str) -> None:
     LLM generation is too slow to run inside the request (it would blow past
     gateway timeouts), so items are created immediately and enriched here.
     """
-    short, long, category = enrich(get_provider(), title, text)
+    short, long, technical, category = enrich(get_provider(), title, text)
     with db.SessionLocal() as session:
         item = session.get(FeedItem, item_id)
         if item is None:
@@ -49,6 +53,7 @@ def _enrich_and_update(item_id: int, title: str, text: str) -> None:
             item.short_summary = short
             item.article_summary = short
         item.long_summary = long
+        item.technical_summary = technical
         if category:
             item.category = category
         session.commit()
@@ -218,6 +223,57 @@ async def create_csi(
     if use_llm:
         _enrich_in_background(item.id, title, summary or title)
     return item
+
+
+@router.post("/login", response_model=LoginResponse)
+def login(payload: LoginRequest):
+    """Lightweight auth: the admin password grants the admin token; everyone
+    else is a named guest. Not production-grade — a single shared admin."""
+    name = (payload.username or "guest").strip() or "guest"
+    admin_pw = get_settings().admin_password
+    if payload.password and payload.password == admin_pw:
+        return LoginResponse(name=name or "admin", role="admin", token=admin_pw)
+    if payload.password:
+        raise HTTPException(status_code=401, detail="wrong admin password")
+    return LoginResponse(name=name, role="guest", token=None)
+
+
+def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+    if not x_admin_token or x_admin_token != get_settings().admin_password:
+        raise HTTPException(status_code=403, detail="admin only")
+
+
+@router.patch("/feed/{feed_id}", response_model=FeedItemOut)
+def edit_feed(
+    feed_id: int,
+    patch: FeedItemPatch,
+    session: Session = Depends(get_session),
+    _: None = Depends(require_admin),
+):
+    item = session.get(FeedItem, feed_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="not found")
+    fields = patch.model_dump(exclude_unset=True)
+    if "short_summary" in fields:
+        item.article_summary = fields["short_summary"]
+    for key, value in fields.items():
+        setattr(item, key, value)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+@router.delete("/feed/{feed_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_feed(
+    feed_id: int,
+    session: Session = Depends(get_session),
+    _: None = Depends(require_admin),
+):
+    item = session.get(FeedItem, feed_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="not found")
+    session.delete(item)
+    session.commit()
 
 
 @router.post("/scan", status_code=202)

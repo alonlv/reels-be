@@ -1,5 +1,7 @@
+import calendar
 import logging
 import re
+from datetime import datetime, timezone
 
 import feedparser
 
@@ -35,6 +37,20 @@ def entry_image(entry) -> str | None:
     return None
 
 
+def entry_published(entry) -> datetime | None:
+    """The source publish date, when the feed provides a parseable one."""
+    for key in ("published_parsed", "updated_parsed"):
+        parsed = entry.get(key)
+        if parsed:
+            try:
+                return datetime.fromtimestamp(
+                    calendar.timegm(parsed), tz=timezone.utc
+                ).replace(tzinfo=None)
+            except (ValueError, OverflowError, TypeError):
+                continue
+    return None
+
+
 def scan_source(session, source: Source, provider) -> int:
     feed = feedparser.parse(source.url)
     inserted = 0
@@ -47,7 +63,7 @@ def scan_source(session, source: Source, provider) -> int:
         if session.query(FeedItem).filter_by(dedup_hash=h).first():
             continue
         raw = entry.get("summary", "")
-        short, long, category = enrich(provider, title, raw)
+        short, long, technical, category = enrich(provider, title, raw)
         # Prefer a thumbnail the feed already supplies; else scrape the page.
         image = entry_image(entry) or fetch_metadata(url)["image_url"]
         session.add(FeedItem(
@@ -55,7 +71,9 @@ def scan_source(session, source: Source, provider) -> int:
             title=title,
             # article_summary keeps mirroring the short blurb for back-compat.
             article_summary=short, short_summary=short, long_summary=long,
+            technical_summary=technical,
             category=category, feed="ai_news", image_url=image,
+            published_at=entry_published(entry),
             source_type="auto", status="published",
             shared_by_name="System Auto-Pull",
             shared_by_email="system@company.internal",

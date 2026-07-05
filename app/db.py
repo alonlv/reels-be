@@ -43,6 +43,8 @@ def migrate() -> None:
         "category": "VARCHAR(32)",
         "feed": "VARCHAR(16) DEFAULT 'ai_news'",
         "image_data": "TEXT",
+        "technical_summary": "TEXT",
+        "published_at": "TIMESTAMP",
     })
 
 

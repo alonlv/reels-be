@@ -35,3 +35,18 @@ def test_image_resolves_relative_inline_img():
     html = "<html><head></head><body><img src='/media/hero.jpg'></body></html>"
     meta = parse_metadata(html, "https://example.com/post/1")
     assert meta["image_url"] == "https://example.com/media/hero.jpg"
+
+
+def test_extracts_body_text_without_scripts():
+    html = """
+    <html><head><title>T</title></head>
+    <body><script>var x = 1;</script><p>Hello world.</p>
+    <style>.a{}</style><p>Second line.</p></body></html>
+    """
+    meta = parse_metadata(html, "https://example.com/a")
+    assert meta["text"] == "Hello world. Second line."
+
+
+def test_text_is_none_for_empty_body():
+    meta = parse_metadata("<html><body></body></html>", "https://example.com/a")
+    assert meta["text"] is None

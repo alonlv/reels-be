@@ -36,6 +36,27 @@ def _best_image(soup: BeautifulSoup, base_url: str) -> str | None:
     return urljoin(base_url, candidate)
 
 
+# Cap the extracted body so a huge page can't bloat the payload we hand to the
+# model; the explain prompt truncates to ~6k anyway.
+MAX_TEXT_CHARS = 8000
+
+
+def _visible_text(soup: BeautifulSoup) -> str | None:
+    """Pull the readable body text out of a page for the model to summarise.
+
+    Scripts, styles and other non-content tags are dropped; the remaining text
+    is collapsed to single spaces and capped. Returns None when the page has no
+    meaningful text (e.g. an SPA shell or a blank/blocked response).
+    """
+    for tag in soup(["script", "style", "noscript", "template", "svg"]):
+        tag.decompose()
+    body = soup.body or soup
+    text = " ".join(body.get_text(" ", strip=True).split())
+    if not text:
+        return None
+    return text[:MAX_TEXT_CHARS]
+
+
 def parse_metadata(html: str, url: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
     title = _meta(soup, "og:title")
@@ -43,7 +64,9 @@ def parse_metadata(html: str, url: str) -> dict:
         title = soup.title.string.strip()
     summary = _meta(soup, "og:description") or _meta(soup, "description")
     image_url = _best_image(soup, url)
-    return {"title": title, "image_url": image_url, "summary": summary}
+    # Extract the body text last: _visible_text strips tags in place.
+    text = _visible_text(soup)
+    return {"title": title, "image_url": image_url, "summary": summary, "text": text}
 
 
 def fetch_metadata(url: str, timeout: float = 8.0) -> dict:
@@ -53,4 +76,4 @@ def fetch_metadata(url: str, timeout: float = 8.0) -> dict:
         resp.raise_for_status()
         return parse_metadata(resp.text, url)
     except Exception:
-        return {"title": None, "image_url": None, "summary": None}
+        return {"title": None, "image_url": None, "summary": None, "text": None}

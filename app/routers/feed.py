@@ -21,8 +21,8 @@ from app.ingest.categorize import categorize
 from app.ingest.classify import classify_url
 from app.ingest.dedupe import dedup_hash
 from app.ingest.enrich import enrich
+from app.ingest.link import inspect_link
 from app.ingest.rss_scanner import run_scan
-from app.ingest.scraper import fetch_metadata
 from app.llm.factory import get_provider
 from app.ratelimit import rate_limit
 
@@ -36,6 +36,17 @@ _SORT = {
     "views": FeedItem.views.desc(),
     "likes": FeedItem.likes.desc(),
 }
+
+
+def _requires_verification(content_type: str, info) -> bool:
+    """Whether a link must be rejected because it couldn't be verified.
+
+    Only plain public articles have to actually load: YouTube/X/Reddit render
+    from their platform embed (which carries the content), and those hosts often
+    block scrapers, so a failed metadata fetch there isn't fatal. Non-public
+    (internal) links are never verifiable and are kept as given.
+    """
+    return content_type == "article" and info.public and not info.reachable
 
 
 def _enrich_and_update(item_id: int, title: str, text: str) -> None:
@@ -124,15 +135,24 @@ def submit_feed(
     url = payload.url.strip()
     if not url.lower().startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="url must be http(s)")
-    meta = fetch_metadata(url)
-    title = payload.title or meta["title"] or url
-    summary = payload.description or meta["summary"]
+    # Verify and read the link rather than storing the bare URL. A public article
+    # that won't load is rejected here so a dead/blocked page never lands in the
+    # feed; a non-public (internal) link can't be verified and is kept as given.
+    content_type = classify_url(url)
+    info = inspect_link(url)
+    if _requires_verification(content_type, info):
+        raise HTTPException(
+            status_code=400,
+            detail="could not verify the link — it appears to be dead or blocked",
+        )
+    title = payload.title or info.title or url
+    summary = payload.description or info.summary
     category = categorize(title, summary or "")
     h = dedup_hash(url, title)
     if session.query(FeedItem).filter_by(dedup_hash=h).first():
         raise HTTPException(status_code=409, detail="duplicate")
     item = FeedItem(
-        content_type=classify_url(url),
+        content_type=content_type,
         source_url=url,
         dedup_hash=h,
         title=title,
@@ -140,7 +160,7 @@ def submit_feed(
         short_summary=summary,
         category=category,
         feed="ai_news",
-        image_url=meta["image_url"],
+        image_url=info.image_url,
         source_type="manual",
         status="published",
         shared_by_name=payload.shared_by_name,
@@ -154,9 +174,12 @@ def submit_feed(
         raise HTTPException(status_code=409, detail="duplicate")
     session.refresh(item)
     # Return immediately; the model rewrites the blurbs/category out of band so
-    # a slow LLM never times out the request.
+    # a slow LLM never times out the request. Feed it the extracted page text so
+    # it summarises what's actually on the page, not just the URL/blurb.
     if payload.summarize:
-        _enrich_in_background(item.id, title, payload.description or meta["summary"] or title)
+        _enrich_in_background(
+            item.id, title, info.text or payload.description or info.summary or title
+        )
     return item
 
 
@@ -183,6 +206,16 @@ async def create_csi(
     if link and not link.lower().startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="link must be http(s)")
 
+    # Same rule as the submit-a-link flow: a public link is verified and read;
+    # an internal/private link can't be reached, so it's kept as given. CSI just
+    # happens to lean on the second case more (internal reports, wiki links).
+    info = inspect_link(link)
+    if link and _requires_verification(classify_url(link), info):
+        raise HTTPException(
+            status_code=400,
+            detail="could not verify the link — it appears to be dead or blocked",
+        )
+
     image_data = None
     if photo is not None:
         content = await photo.read()
@@ -192,8 +225,12 @@ async def create_csi(
             mime = photo.content_type or "image/jpeg"
             image_data = f"data:{mime};base64," + base64.b64encode(content).decode()
 
-    short = summary.strip() or None
-    category = categorize(title, summary)
+    # Prefer the user's own summary; fall back to what we extracted from a
+    # verified link so the card still says something.
+    short = summary.strip() or info.summary or None
+    category = categorize(title, summary or info.summary or "")
+    # A verified link's social image backfills the card when no photo was given.
+    image_url = info.image_url if image_data is None else None
 
     # Dedupe by link when given; otherwise every manual entry is distinct.
     h = dedup_hash(link or f"csi:{uuid4()}", title)
@@ -206,6 +243,7 @@ async def create_csi(
         short_summary=short,
         category=category,
         feed="csi",
+        image_url=image_url,
         image_data=image_data,
         source_type="manual",
         status="published",
@@ -220,8 +258,9 @@ async def create_csi(
         raise HTTPException(status_code=409, detail="duplicate")
     session.refresh(item)
     # Enrich out of band so a slow model never times out the upload request.
+    # Feed the model the extracted page text when we verified a link.
     if use_llm:
-        _enrich_in_background(item.id, title, summary or title)
+        _enrich_in_background(item.id, title, info.text or summary or title)
     return item
 
 

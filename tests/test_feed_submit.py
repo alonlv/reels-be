@@ -38,15 +38,18 @@ def test_submit_runs_llm_when_summarize_true(client, monkeypatch):
             return {"short": "AI short", "long": "AI long", "category": "product"}
 
     monkeypatch.setattr(feed_mod, "get_provider", lambda: FakeProvider())
+    # Enrichment runs in a background thread; run it inline for the test.
+    monkeypatch.setattr(feed_mod, "_enrich_in_background", feed_mod._enrich_and_update)
     resp = client.post("/api/feed", json={
         "url": "https://example.com/p", "summarize": True,
     })
     assert resp.status_code == 201
-    body = resp.json()
-    assert body["short_summary"] == "AI short"
-    assert body["long_summary"] == "AI long"
-    assert body["category"] == "product"
-    assert body["feed"] == "ai_news"
+    item_id = resp.json()["id"]
+    got = next(i for i in client.get("/api/feed").json() if i["id"] == item_id)
+    assert got["short_summary"] == "AI short"
+    assert got["long_summary"] == "AI long"
+    assert got["category"] == "product"
+    assert got["feed"] == "ai_news"
 
 
 def test_submit_duplicate_409(client, monkeypatch):

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import app.db as db
 from app.db import get_session
 from app.models import FeedItem
 from app.schemas import FeedItemOut, FeedItemCreate
@@ -31,6 +32,32 @@ _SORT = {
     "views": FeedItem.views.desc(),
     "likes": FeedItem.likes.desc(),
 }
+
+
+def _enrich_and_update(item_id: int, title: str, text: str) -> None:
+    """Run the model and patch an item's summaries/category in the background.
+
+    LLM generation is too slow to run inside the request (it would blow past
+    gateway timeouts), so items are created immediately and enriched here.
+    """
+    short, long, category = enrich(get_provider(), title, text)
+    with db.SessionLocal() as session:
+        item = session.get(FeedItem, item_id)
+        if item is None:
+            return
+        if short:
+            item.short_summary = short
+            item.article_summary = short
+        item.long_summary = long
+        if category:
+            item.category = category
+        session.commit()
+
+
+def _enrich_in_background(item_id: int, title: str, text: str) -> None:
+    threading.Thread(
+        target=_enrich_and_update, args=(item_id, title, text), daemon=True
+    ).start()
 
 
 @router.get("/feed", response_model=list[FeedItemOut])
@@ -95,14 +122,7 @@ def submit_feed(
     meta = fetch_metadata(url)
     title = payload.title or meta["title"] or url
     summary = payload.description or meta["summary"]
-    long = None
     category = categorize(title, summary or "")
-    # When asked, let the model write the short/long blurbs + category from the
-    # page's own text (fetched description) so manual links read like auto ones.
-    if payload.summarize:
-        source_text = payload.description or meta["summary"] or title
-        llm_short, long, category = enrich(get_provider(), title, source_text)
-        summary = llm_short or summary
     h = dedup_hash(url, title)
     if session.query(FeedItem).filter_by(dedup_hash=h).first():
         raise HTTPException(status_code=409, detail="duplicate")
@@ -113,7 +133,6 @@ def submit_feed(
         title=title,
         article_summary=summary,
         short_summary=summary,
-        long_summary=long,
         category=category,
         feed="ai_news",
         image_url=meta["image_url"],
@@ -129,6 +148,10 @@ def submit_feed(
         session.rollback()
         raise HTTPException(status_code=409, detail="duplicate")
     session.refresh(item)
+    # Return immediately; the model rewrites the blurbs/category out of band so
+    # a slow LLM never times out the request.
+    if payload.summarize:
+        _enrich_in_background(item.id, title, payload.description or meta["summary"] or title)
     return item
 
 
@@ -165,11 +188,7 @@ async def create_csi(
             image_data = f"data:{mime};base64," + base64.b64encode(content).decode()
 
     short = summary.strip() or None
-    long = None
     category = categorize(title, summary)
-    if use_llm:
-        llm_short, long, category = enrich(get_provider(), title, summary or title)
-        short = llm_short or short
 
     # Dedupe by link when given; otherwise every manual entry is distinct.
     h = dedup_hash(link or f"csi:{uuid4()}", title)
@@ -180,7 +199,6 @@ async def create_csi(
         title=title,
         article_summary=short,
         short_summary=short,
-        long_summary=long,
         category=category,
         feed="csi",
         image_data=image_data,
@@ -196,6 +214,9 @@ async def create_csi(
         session.rollback()
         raise HTTPException(status_code=409, detail="duplicate")
     session.refresh(item)
+    # Enrich out of band so a slow model never times out the upload request.
+    if use_llm:
+        _enrich_in_background(item.id, title, summary or title)
     return item
 
 

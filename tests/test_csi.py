@@ -31,15 +31,37 @@ def test_csi_uses_llm_when_checked(client, monkeypatch):
             return {"short": "llm short", "long": "llm long", "category": "research"}
 
     monkeypatch.setattr(feed_mod, "get_provider", lambda: FakeProvider())
+    # Enrichment is async in production; run it inline so the test is deterministic.
+    monkeypatch.setattr(feed_mod, "_enrich_in_background", feed_mod._enrich_and_update)
     resp = client.post(
         "/api/csi",
         data={"title": "Deep topic", "summary": "seed", "use_llm": "true"},
     )
     assert resp.status_code == 201
-    body = resp.json()
-    assert body["short_summary"] == "llm short"
-    assert body["long_summary"] == "llm long"
-    assert body["category"] == "research"
+    item_id = resp.json()["id"]
+    got = next(i for i in client.get("/api/feed?feed=csi").json() if i["id"] == item_id)
+    assert got["short_summary"] == "llm short"
+    assert got["long_summary"] == "llm long"
+    assert got["category"] == "research"
+
+
+def test_csi_llm_does_not_block_the_request(client, monkeypatch):
+    # The request must return before the (slow) model runs — assert it hands the
+    # work to the background helper rather than calling enrich inline.
+    calls = {}
+    monkeypatch.setattr(
+        feed_mod, "_enrich_in_background",
+        lambda *a: calls.setdefault("args", a),
+    )
+    resp = client.post(
+        "/api/csi",
+        data={"title": "Async topic", "summary": "seed text", "use_llm": "true"},
+    )
+    assert resp.status_code == 201
+    # Response carries the user's seed immediately; enrichment deferred.
+    assert resp.json()["short_summary"] == "seed text"
+    assert resp.json()["long_summary"] is None
+    assert calls["args"][1] == "Async topic"
 
 
 def test_csi_rejects_bad_link(client):

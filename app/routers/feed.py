@@ -3,7 +3,7 @@ import threading
 from uuid import uuid4
 
 from fastapi import (
-    APIRouter, Depends, File, Form, Header, HTTPException, Query, Request,
+    APIRouter, Depends, File, Form, HTTPException, Query, Request,
     UploadFile, status,
 )
 from sqlalchemy import select
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 import app.db as db
 from app.config import get_settings
 from app.db import get_session
+from app.deps import require_admin
 from app.models import FeedItem
 from app.schemas import (
     FeedItemCreate, FeedItemOut, FeedItemPatch, LoginRequest, LoginResponse,
@@ -277,11 +278,6 @@ def login(payload: LoginRequest):
     return LoginResponse(name=name, role="guest", token=None)
 
 
-def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
-    if not x_admin_token or x_admin_token != get_settings().admin_password:
-        raise HTTPException(status_code=403, detail="admin only")
-
-
 @router.patch("/feed/{feed_id}", response_model=FeedItemOut)
 def edit_feed(
     feed_id: int,
@@ -316,6 +312,6 @@ def delete_feed(
 
 
 @router.post("/scan", status_code=202)
-def trigger_scan():
+def trigger_scan(_: None = Depends(require_admin)):
     threading.Thread(target=run_scan, daemon=True).start()
     return {"ok": True}

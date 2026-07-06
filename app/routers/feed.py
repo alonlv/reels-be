@@ -267,10 +267,16 @@ async def create_csi(
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
-    """Lightweight auth: the admin password grants the admin token; everyone
-    else is a named guest. Not production-grade — a single shared admin."""
+    """Legacy username + admin-password auth, kept as the SSO fallback.
+
+    Gated behind the PASSWORD_AUTH_ENABLED feature flag: the admin password
+    grants the admin token; everyone else is a named guest. Not production-grade
+    — a single shared admin."""
+    settings = get_settings()
+    if not settings.password_auth_enabled:
+        raise HTTPException(status_code=403, detail="password login is disabled; use SSO")
     name = (payload.username or "guest").strip() or "guest"
-    admin_pw = get_settings().admin_password
+    admin_pw = settings.admin_password
     if payload.password and payload.password == admin_pw:
         return LoginResponse(name=name or "admin", role="admin", token=admin_pw)
     if payload.password:

@@ -25,9 +25,22 @@ services:
     container_name: reels-backend
     environment:
       DATABASE_URL: postgresql+psycopg2://reels:reels@db:5432/reels
+      # Azure Database for PostgreSQL requires TLS — set DB_SSLMODE=require there.
+      # DB_SSLMODE: require
       MODEL_PROVIDER: ollama
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: gemma2:2b
+      # To use an Azure Function as the LLM, set:
+      # MODEL_PROVIDER: azure_function
+      # AZURE_FUNCTION_URL: https://<app>.azurewebsites.net/api/llm
+      # AZURE_FUNCTION_KEY: <functions key>
+      # Auth: users are managed by SSO (Entra ID); flip PASSWORD_AUTH_ENABLED to
+      # keep the legacy name + admin-password fallback.
+      PASSWORD_AUTH_ENABLED: "true"
+      # SSO_ENABLED: "true"
+      # AZURE_TENANT_ID: <tenant guid>
+      # AZURE_CLIENT_ID: <app client id>
+      # ADMIN_EMAILS: you@yourcompany.com
       CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
       SCAN_ENABLED: "true"
       SCAN_CRON: "0 * * * *"

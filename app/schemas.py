@@ -61,8 +61,24 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     name: str
-    role: str  # "admin" | "guest"
+    role: str  # "admin" | "user" | "guest"
     token: str | None = None
+
+
+class SsoLoginRequest(BaseModel):
+    # An OAuth2 access token obtained by the frontend from Azure AD / Entra ID.
+    access_token: str
+
+
+class AuthConfig(BaseModel):
+    """Tells the frontend which sign-in methods are live and how to run SSO."""
+
+    sso_enabled: bool
+    password_auth_enabled: bool
+    tenant_id: str | None = None
+    client_id: str | None = None
+    authority: str | None = None
+    scopes: list[str] = []
 
 
 class FeedItemPatch(BaseModel):

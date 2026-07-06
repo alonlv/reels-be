@@ -14,9 +14,27 @@ class Base(DeclarativeBase):
 
 @lru_cache
 def get_engine() -> Engine:
-    url = get_settings().database_url
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, connect_args=connect_args, future=True)
+    settings = get_settings()
+    url = settings.database_url
+    is_sqlite = url.startswith("sqlite")
+    if is_sqlite:
+        connect_args = {"check_same_thread": False}
+    else:
+        # Managed Postgres (Azure Database for PostgreSQL, etc.) usually mandates
+        # TLS; psycopg2 takes sslmode as a connect arg. Only set it when asked so
+        # local/docker Postgres without certs still connects.
+        connect_args = {}
+        if settings.db_sslmode:
+            connect_args["sslmode"] = settings.db_sslmode
+    # pool_pre_ping validates a pooled connection before use so a connection the
+    # cloud DB dropped during an idle period is transparently replaced instead of
+    # surfacing as an error on the next request. SQLite is file-local, so skip it.
+    return create_engine(
+        url,
+        connect_args=connect_args,
+        pool_pre_ping=settings.db_pool_pre_ping and not is_sqlite,
+        future=True,
+    )
 
 
 SessionLocal = sessionmaker(bind=get_engine(), expire_on_commit=False, future=True)

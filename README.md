@@ -43,5 +43,26 @@ pytest -v
 
 ## Switching LLM provider
 
-Set `MODEL_PROVIDER=anthropic` (+ `ANTHROPIC_API_KEY`) or `openai` (+ `OPENAI_API_KEY`).
-Default is local Ollama `gemma2:2b`.
+Set `MODEL_PROVIDER` to one of:
+
+- `ollama` (default, local `gemma2:2b`)
+- `anthropic` (+ `ANTHROPIC_API_KEY`)
+- `openai` (+ `OPENAI_API_KEY`)
+- `azure_openai` (+ `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`,
+  `AZURE_OPENAI_DEPLOYMENT`) — Azure OpenAI / Azure AI Foundry. The model is the
+  deployment name; `AZURE_OPENAI_API_VERSION` defaults to `2024-12-01-preview`.
+- `azure_function` (+ `AZURE_FUNCTION_URL`, `AZURE_FUNCTION_KEY`) — routes
+  generation through an HTTP-triggered Azure Function acting as an LLM gateway.
+
+## Auth
+
+Users are managed by SSO (Microsoft Entra ID / Azure AD). The frontend fetches
+`/api/auth/config`, runs the Entra sign-in, and posts the token to
+`/api/auth/sso`; users listed in `ADMIN_EMAILS` become admins. Set
+`PASSWORD_AUTH_ENABLED=true` to keep the legacy name + `ADMIN_PASSWORD` fallback
+(enabled by default for local dev; disable it in production).
+
+## Deploying to Azure
+
+The whole stack can run on Azure (Container Apps + Azure Database for PostgreSQL
++ Azure Function LLM + Entra ID SSO). See [docs/azure-deployment.md](docs/azure-deployment.md).

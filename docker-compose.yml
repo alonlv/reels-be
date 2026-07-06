@@ -30,6 +30,12 @@ services:
       MODEL_PROVIDER: ollama
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: gemma2:2b
+      # To use Azure OpenAI / Azure AI Foundry as the LLM, set:
+      # MODEL_PROVIDER: azure_openai
+      # AZURE_OPENAI_ENDPOINT: https://<resource>.openai.azure.com/
+      # AZURE_OPENAI_API_KEY: <key>
+      # AZURE_OPENAI_DEPLOYMENT: <deployment name>
+      # AZURE_OPENAI_API_VERSION: 2024-12-01-preview
       # To use an Azure Function as the LLM, set:
       # MODEL_PROVIDER: azure_function
       # AZURE_FUNCTION_URL: https://<app>.azurewebsites.net/api/llm

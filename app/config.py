@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # Azure Function used as an LLM gateway (MODEL_PROVIDER=azure_function).
     azure_function_url: str | None = None
     azure_function_key: str | None = None
+    # Azure OpenAI / Azure AI Foundry (MODEL_PROVIDER=azure_openai). The model is
+    # picked by the deployment name; the endpoint + key come from the resource.
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_deployment: str | None = None
+    azure_openai_api_version: str = "2024-12-01-preview"
 
     cors_origins: str = "*"
     rate_limit_max: int = 5

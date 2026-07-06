@@ -11,7 +11,7 @@ docker-compose — but these are the pieces that light up in a cloud deployment.
 | Backend    | Azure Container Apps or App Service (container)  | Build `reels-be/Dockerfile`, expose `:8000` |
 | Frontend   | Azure Static Web Apps or Container Apps          | Build `reels-fe/Dockerfile`; set `VITE_API_BASE_URL` to the backend URL |
 | Database   | Azure Database for PostgreSQL (Flexible Server)  | `DATABASE_URL` + `DB_SSLMODE=require` |
-| LLM        | Azure Function (LLM gateway)                     | `MODEL_PROVIDER=azure_function` + `AZURE_FUNCTION_URL`/`AZURE_FUNCTION_KEY` |
+| LLM        | Azure OpenAI / Azure AI Foundry                  | `MODEL_PROVIDER=azure_openai` + endpoint/key/deployment |
 | Auth       | Microsoft Entra ID (Azure AD) SSO                | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `ADMIN_EMAILS` |
 
 ## 1. Database — Azure Database for PostgreSQL
@@ -29,11 +29,28 @@ Schema is created/migrated on boot (`app.db.migrate()` / `entrypoint.sh`), so no
 manual migration step is needed. `create_all` plus the in-place
 `ALTER TABLE ... ADD COLUMN` healers use plain SQL types that Postgres accepts.
 
-## 2. LLM — Azure Function gateway
+## 2. LLM — Azure OpenAI / Azure AI Foundry
 
-Set `MODEL_PROVIDER=azure_function` to route summarisation/explanation through
-an HTTP-triggered Azure Function that fronts your model of choice (Azure OpenAI,
-a hosted open-weights model, etc.).
+Set `MODEL_PROVIDER=azure_openai` to call an Azure OpenAI (Azure AI Foundry)
+deployment directly. Provide the resource endpoint, key, and the *deployment*
+name you created in the portal (the deployment selects the model):
+
+```
+MODEL_PROVIDER=azure_openai
+AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com/
+AZURE_OPENAI_API_KEY=<key>
+AZURE_OPENAI_DEPLOYMENT=<deployment name>
+AZURE_OPENAI_API_VERSION=2024-12-01-preview   # optional; this is the default
+```
+
+This hits the same REST endpoint the `openai.AzureOpenAI` client uses
+(`{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=…`
+with the `api-key` header), so no extra SDK dependency is pulled in.
+
+### Alternative: Azure Function gateway
+
+Instead, set `MODEL_PROVIDER=azure_function` to route summarisation/explanation
+through an HTTP-triggered Azure Function that fronts your model of choice.
 
 Contract the function must implement:
 

@@ -48,6 +48,9 @@ Set `MODEL_PROVIDER` to one of:
 - `ollama` (default, local `gemma2:2b`)
 - `anthropic` (+ `ANTHROPIC_API_KEY`)
 - `openai` (+ `OPENAI_API_KEY`)
+- `azure_openai` (+ `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`,
+  `AZURE_OPENAI_DEPLOYMENT`) — Azure OpenAI / Azure AI Foundry. The model is the
+  deployment name; `AZURE_OPENAI_API_VERSION` defaults to `2024-12-01-preview`.
 - `azure_function` (+ `AZURE_FUNCTION_URL`, `AZURE_FUNCTION_KEY`) — routes
   generation through an HTTP-triggered Azure Function acting as an LLM gateway.
 
